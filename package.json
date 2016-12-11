@@ -1,32 +1,21 @@
 {
-  "name": "typescript-babel-webpack",
+  "name": "timeline",
   "version": "1.0.0",
-  "description": "A simple lightweight TypeScript + Babel + Webpack project.",
+  "description": "Interactive timeline showing dependencies between asynchronous processes.",
   "main": "dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
-    "build": "webpack",
-    "rebuild": "rimraf dist && webpack",
-    "clean": "rimraf dist",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "webpack-dev-server --progress --colors --inline --content-base public/",
+    "build": "webpack"
   },
   "author": {
-    "name": "Bruno Leonardo Michels",
-    "email": "brunolm7@gmail.com",
-    "url": "http://blog.codingwise.com/"
+    "name": "Wade Brainerd",
+    "email": "wade@wadeb.com",
+    "url": "http://wadeb.com/"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/brunolm/typescript-babel-webpack"
+    "url": "https://github.com/wadetb/timeline"
   },
-  "keywords": [
-    "typescript",
-    "babel",
-    "webpack",
-    "bootstrap",
-    "lightweight",
-    "simple"
-  ],
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^4.0.27-alpha",
@@ -35,7 +24,7 @@
     "babel-polyfill": "^6.9.1",
     "babel-preset-es2015": "^6.9.0",
     "babel-preset-stage-0": "^6.5.0",
-    "rimraf": "^2.5.3",
+    "source-map-loader": "^0.1.5",
     "ts-loader": "^0.8.2",
     "typescript": "^2.0.0",
     "webpack": "^1.13.1"
