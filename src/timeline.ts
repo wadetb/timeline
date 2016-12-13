@@ -10,17 +10,31 @@ interface Value {
 }
 let values: { [key: string]: Value } = {};
 
-interface Event {
+interface SignalEvent {
     name: string;
     thread: Thread;
     timestamp: number;
-    color?: string;
-    duration?: number;
-    startTimestamp?: number;
-    waitThread?: Thread;
-    waitTimestamp?: number;
 }
-let events: Event[] = [];
+let signalEvents: SignalEvent[] = [];
+
+interface WaitEvent {
+    name: string;
+    thread: Thread;
+    timestamp: number;
+    startTimestamp: number;
+    waitThread: Thread;
+    waitTimestamp: number;
+}
+let waitEvents: WaitEvent[] = [];
+
+interface WorkEvent {
+    name: string;
+    thread: Thread;
+    timestamp: number;
+    color: string;
+    duration: number;
+}
+let workEvents: WorkEvent[] = [];
 
 export let inspect = {};
 
@@ -30,11 +44,10 @@ export function signal(key: string, value?: number) {
     if (runningThread.name in inspect) {
         console.log(`${runningThread.name}: signal ${key} => ${value}`);
     }
-    events.push({
+    signalEvents.push({
         name: key,
         thread: runningThread,
-        timestamp: t,
-        duration: 0
+        timestamp: t
     });
     values[key] = { thread: runningThread, timestamp: t, value: value };
 }
@@ -82,7 +95,7 @@ export function* wait(keyOrMsOrFn: string | number | Function, value?: number | 
 
         let v = values[keyOrMsOrFn];
         if (v.timestamp > start) {
-            events.push({
+            waitEvents.push({
                 name: keyOrMsOrFn,
                 thread: runningThread,
                 timestamp: t,
@@ -115,7 +128,7 @@ export function* work(name: string, color: string, ms: number, value?: number) {
         value: value,
         duration: undefined
     }
-    events.push(e);
+    workEvents.push(e);
     yield ms;
     e.duration = ms;
     values[name] = { thread: runningThread, timestamp: t, value: value };
@@ -210,63 +223,51 @@ export function tick() {
     ctx.fillStyle = "#808080";
     ctx.fillRect(t * pxPerMs, 0, 1, canvas.height);
 
-    for (let e of events) {
+    for (let e of waitEvents) {
         ctx.strokeStyle = "#000000";
         let y = e.thread.y;
-        if (e.waitTimestamp) {
-            ctx.beginPath();
-            ctx.moveTo(e.timestamp * pxPerMs, e.waitThread.y + 5);
-            ctx.bezierCurveTo(
-                e.timestamp * pxPerMs, (e.thread.y*0.9 + e.waitThread.y*0.1) + 5,
-                e.startTimestamp * pxPerMs, (e.thread.y*0.5 + e.waitThread.y*0.5) + 5,
-                e.startTimestamp * pxPerMs, e.thread.y + 5);
-            ctx.lineTo(e.waitTimestamp * pxPerMs, e.thread.y + 5);
-            ctx.lineTo(e.timestamp * pxPerMs, e.waitThread.y + 5);
-            ctx.stroke();
-            ctx.fillStyle = "#d0d0d0";
-            ctx.fill();
-        }
+        ctx.beginPath();
+        ctx.moveTo(e.timestamp * pxPerMs, e.waitThread.y + 5);
+        ctx.bezierCurveTo(
+            e.timestamp * pxPerMs, (e.thread.y * 0.9 + e.waitThread.y * 0.1) + 5,
+            e.startTimestamp * pxPerMs, (e.thread.y * 0.5 + e.waitThread.y * 0.5) + 5,
+            e.startTimestamp * pxPerMs, e.thread.y + 5);
+        ctx.lineTo(e.waitTimestamp * pxPerMs, e.thread.y + 5);
+        ctx.lineTo(e.timestamp * pxPerMs, e.waitThread.y + 5);
+        ctx.stroke();
+        ctx.fillStyle = "#d0d0d0";
+        ctx.fill();
     }
 
-    for (let e of events) {
+    for (let e of workEvents) {
         ctx.strokeStyle = "#000000";
         ctx.fillStyle = e.color || "#780000";
         let y = e.thread.y;
-        if (e.waitTimestamp) {
-        } else if (e.duration == 0) {
-        } else {
-            ctx.beginPath();
-            ctx.rect(e.timestamp * pxPerMs, y - 5, (e.duration || t - e.timestamp) * pxPerMs, 20);
-            ctx.fill();
-            ctx.stroke();
-        }
+        ctx.beginPath();
+        ctx.rect(e.timestamp * pxPerMs, y - 5, (e.duration || t - e.timestamp) * pxPerMs, 20);
+        ctx.fill();
+        ctx.stroke();
     }
 
-    for (let e of events) {
+    for (let e of signalEvents) {
         ctx.strokeStyle = "#000000";
-        ctx.fillStyle = e.color || "#780000";
+        ctx.fillStyle = "#780000";
         let y = e.thread.y;
-        if (e.waitTimestamp) {
-        } else if (e.duration == 0) {
-            ctx.beginPath();
-            ctx.moveTo(e.timestamp * pxPerMs, y + 5);
-            ctx.lineTo(e.timestamp * pxPerMs - 8, y - 8);
-            ctx.lineTo(e.timestamp * pxPerMs + 8, y - 8);
-            ctx.lineTo(e.timestamp * pxPerMs, y + 5);
-            ctx.fill();
-        }
+        ctx.beginPath();
+        ctx.moveTo(e.timestamp * pxPerMs, y + 5);
+        ctx.lineTo(e.timestamp * pxPerMs - 8, y - 8);
+        ctx.lineTo(e.timestamp * pxPerMs + 8, y - 8);
+        ctx.lineTo(e.timestamp * pxPerMs, y + 5);
+        ctx.fill();
     }
 
-    for (let e of events) {
+    for (let e of waitEvents) {
         ctx.strokeStyle = "#000000";
-        ctx.fillStyle = e.color || "#780000";
+        ctx.fillStyle = "#000000";
         let y = e.thread.y;
-        if (e.waitTimestamp) {
-            ctx.beginPath();
-            ctx.arc(e.timestamp * pxPerMs, y + 5, 5, 0, 2 * Math.PI);
-            ctx.fillStyle = "#000000";
-            ctx.fill();
-        }
+        ctx.beginPath();
+        ctx.arc(e.timestamp * pxPerMs, y + 5, 5, 0, 2 * Math.PI);
+        ctx.fill();
     }
 
     ctx.restore();
