@@ -39,6 +39,7 @@ let workEvents: WorkEvent[] = [];
 export let inspect = {};
 
 let runningThread = null;
+let activeEvent = null;
 
 export function signal(key: string, value?: number) {
     if (runningThread.name in inspect) {
@@ -214,8 +215,7 @@ function waitTimePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
         x2, (y1 * 0.5 + y3 * 0.5) + 5,
         x2, y1 + 5);
     ctx.lineTo(x3, y1 + 5);
-    ctx.lineTo(x1, y3 + 5);
-    ctx.stroke();
+    ctx.closePath();
 }
 
 function waitHandlePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
@@ -231,7 +231,6 @@ function workPath(ctx: CanvasRenderingContext2D, e: WorkEvent) {
     let y = e.thread.y;
     ctx.beginPath();
     ctx.rect(x, y - 5, w, 20);
-    ctx.fill();
 }
 
 function signalPath(ctx: CanvasRenderingContext2D, e: SignalEvent) {
@@ -241,7 +240,7 @@ function signalPath(ctx: CanvasRenderingContext2D, e: SignalEvent) {
     ctx.moveTo(x, y + 5);
     ctx.lineTo(x - 8, y - 8);
     ctx.lineTo(x + 8, y - 8);
-    ctx.lineTo(x, y + 5);
+    ctx.closePath();
 }
 
 function draw() {
@@ -268,30 +267,58 @@ function draw() {
 
     for (let e of waitEvents) {
         waitTimePath(ctx, e);
-        ctx.strokeStyle = "#000000";
+        if (e === activeEvent) {
+            ctx.strokeStyle = "yellow";
+            ctx.lineWidth = 4;
+        } else {
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+        }
         ctx.fillStyle = "#d0d0d0";
         ctx.fill();
+        ctx.stroke();
     }
 
     for (let e of workEvents) {
         workPath(ctx, e);
-        ctx.strokeStyle = "#000000";
+        if (e === activeEvent) {
+            ctx.strokeStyle = "yellow";
+            ctx.lineWidth = 4;
+        } else {
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+        }
         ctx.fillStyle = e.color || "#780000";
+        ctx.fill();
         ctx.stroke();
     }
 
     for (let e of signalEvents) {
         signalPath(ctx, e);
-        ctx.strokeStyle = "#000000";
+        if (e === activeEvent) {
+            ctx.strokeStyle = "yellow";
+            ctx.lineWidth = 4;
+        } else {
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+        }
         ctx.fillStyle = "#780000";
         ctx.fill();
+        ctx.stroke();
     }
 
     for (let e of waitEvents) {
         waitHandlePath(ctx, e);
-        ctx.strokeStyle = "#000000";
+        if (e === activeEvent) {
+            ctx.strokeStyle = "yellow";
+            ctx.lineWidth = 4;
+        } else {
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+        }
         ctx.fillStyle = "#000000";
         ctx.fill();
+        ctx.stroke();
     }
 
     ctx.restore();
@@ -301,6 +328,47 @@ function draw() {
         ctx.fillStyle = "#000000";
         ctx.fillText(t.name, 2, t.y - 10);
     }
+}
+
+function mouseMove(this: HTMLCanvasElement, ev:MouseEvent) {
+    let ctx = canvas.getContext("2d");
+
+    ctx.save();
+
+    let rect = canvas.getBoundingClientRect();
+    let canvasX = ev.clientX - rect.left;
+    let canvasY = ev.clientY - rect.top;
+
+    let x = canvasX - Math.min(0, -t * pxPerMs + canvas.width - 20);
+    let y = canvasY;
+
+    activeEvent = null;
+    for (let e of waitEvents) {
+        waitTimePath(ctx, e);
+        if (ctx.isPointInPath(x, y)) {
+            activeEvent = e;
+        }
+    }
+    for (let e of workEvents) {
+        workPath(ctx, e);
+        if (ctx.isPointInPath(x, y)) {
+            activeEvent = e;
+        }
+    }
+    for (let e of signalEvents) {
+        signalPath(ctx, e);
+        if (ctx.isPointInPath(x, y)) {
+            activeEvent = e;
+        }
+    }
+    for (let e of waitEvents) {
+        waitHandlePath(ctx, e);
+        if (ctx.isPointInPath(x, y)) {
+            activeEvent = e;
+        }
+    }
+
+    ctx.restore();
 }
 
 interface TimelineOptions {
@@ -314,6 +382,8 @@ export function timeline(options: TimelineOptions) {
     for (let t of options.threads) {
         threads.push(new Thread(t));
     }
+
+    canvas.addEventListener('mousemove', mouseMove);
 
     setInterval(() => {
         tick();
