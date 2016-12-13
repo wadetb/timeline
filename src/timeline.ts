@@ -155,7 +155,7 @@ export class Thread {
 export let pxPerMs = 10;
 export let msPerTick = 0.25;
 
-export function tick() {
+function tick() {
     let msLeft = msPerTick;
     while (msLeft > 0) {
 
@@ -199,7 +199,52 @@ export function tick() {
         msLeft -= shortest;
         t += shortest;
     }
+}
 
+function waitTimePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
+    let x1 = e.timestamp * pxPerMs;
+    let x2 = e.startTimestamp * pxPerMs;
+    let x3 = e.waitTimestamp * pxPerMs;
+    let y1 = e.thread.y;
+    let y3 = e.waitThread.y;
+    ctx.beginPath();
+    ctx.moveTo(x1, y3 + 5);
+    ctx.bezierCurveTo(
+        x1, (y1 * 0.9 + y3 * 0.1) + 5,
+        x2, (y1 * 0.5 + y3 * 0.5) + 5,
+        x2, y1 + 5);
+    ctx.lineTo(x3, y1 + 5);
+    ctx.lineTo(x1, y3 + 5);
+    ctx.stroke();
+}
+
+function waitHandlePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
+    let x = e.timestamp * pxPerMs;
+    let y = e.thread.y;
+    ctx.beginPath();
+    ctx.arc(x, y + 5, 5, 0, 2 * Math.PI);
+}
+
+function workPath(ctx: CanvasRenderingContext2D, e: WorkEvent) {
+    let x = e.timestamp * pxPerMs;
+    let w = (e.duration || t - e.timestamp) * pxPerMs;
+    let y = e.thread.y;
+    ctx.beginPath();
+    ctx.rect(x, y - 5, w, 20);
+    ctx.fill();
+}
+
+function signalPath(ctx: CanvasRenderingContext2D, e: SignalEvent) {
+    let x = e.timestamp * pxPerMs;
+    let y = e.thread.y;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 5);
+    ctx.lineTo(x - 8, y - 8);
+    ctx.lineTo(x + 8, y - 8);
+    ctx.lineTo(x, y + 5);
+}
+
+function draw() {
     let ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -208,12 +253,10 @@ export function tick() {
     let y = 30;
     for (let t of threads) {
         t.y = y;
-
         ctx.beginPath();
         ctx.moveTo(0, t.y + 5);
         ctx.lineTo(canvas.width, t.y + 5);
         ctx.stroke();
-
         y += 50;
     }
 
@@ -224,49 +267,30 @@ export function tick() {
     ctx.fillRect(t * pxPerMs, 0, 1, canvas.height);
 
     for (let e of waitEvents) {
+        waitTimePath(ctx, e);
         ctx.strokeStyle = "#000000";
-        let y = e.thread.y;
-        ctx.beginPath();
-        ctx.moveTo(e.timestamp * pxPerMs, e.waitThread.y + 5);
-        ctx.bezierCurveTo(
-            e.timestamp * pxPerMs, (e.thread.y * 0.9 + e.waitThread.y * 0.1) + 5,
-            e.startTimestamp * pxPerMs, (e.thread.y * 0.5 + e.waitThread.y * 0.5) + 5,
-            e.startTimestamp * pxPerMs, e.thread.y + 5);
-        ctx.lineTo(e.waitTimestamp * pxPerMs, e.thread.y + 5);
-        ctx.lineTo(e.timestamp * pxPerMs, e.waitThread.y + 5);
-        ctx.stroke();
         ctx.fillStyle = "#d0d0d0";
         ctx.fill();
     }
 
     for (let e of workEvents) {
+        workPath(ctx, e);
         ctx.strokeStyle = "#000000";
         ctx.fillStyle = e.color || "#780000";
-        let y = e.thread.y;
-        ctx.beginPath();
-        ctx.rect(e.timestamp * pxPerMs, y - 5, (e.duration || t - e.timestamp) * pxPerMs, 20);
-        ctx.fill();
         ctx.stroke();
     }
 
     for (let e of signalEvents) {
+        signalPath(ctx, e);
         ctx.strokeStyle = "#000000";
         ctx.fillStyle = "#780000";
-        let y = e.thread.y;
-        ctx.beginPath();
-        ctx.moveTo(e.timestamp * pxPerMs, y + 5);
-        ctx.lineTo(e.timestamp * pxPerMs - 8, y - 8);
-        ctx.lineTo(e.timestamp * pxPerMs + 8, y - 8);
-        ctx.lineTo(e.timestamp * pxPerMs, y + 5);
         ctx.fill();
     }
 
     for (let e of waitEvents) {
+        waitHandlePath(ctx, e);
         ctx.strokeStyle = "#000000";
         ctx.fillStyle = "#000000";
-        let y = e.thread.y;
-        ctx.beginPath();
-        ctx.arc(e.timestamp * pxPerMs, y + 5, 5, 0, 2 * Math.PI);
         ctx.fill();
     }
 
@@ -291,5 +315,8 @@ export function timeline(options: TimelineOptions) {
         threads.push(new Thread(t));
     }
 
-    setInterval(tick, 30);
+    setInterval(() => {
+        tick();
+        draw();
+    }, 30);
 }
