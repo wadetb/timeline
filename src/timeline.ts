@@ -2,6 +2,7 @@ export let t = 0;
 
 var threads: Thread[] = [];
 var canvas: HTMLCanvasElement;
+var controls: HTMLElement;
 
 interface Value {
     thread: Thread;
@@ -153,13 +154,16 @@ export class Thread {
     waitTime = 0;
 }
 
-export let paused = false;
-export let pxPerMs = 10;
-export let msPerTick = 0.25;
+let tickRate = 30;
+
+let paused = false;
+let pxPerMs = 10;
+let msPerTick = 0.25;
+let msView = 10;
 
 function tick() {
-    let msLeft = paused 
-        ? 0 
+    let msLeft = paused
+        ? 0
         : msPerTick;
 
     while (msLeft > 0) {
@@ -248,6 +252,8 @@ function signalPath(ctx: CanvasRenderingContext2D, e: SignalEvent) {
 }
 
 function draw() {
+    pxPerMs = canvas.width / msView;
+     
     let ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -334,7 +340,7 @@ function draw() {
     }
 }
 
-function mouseMove(this: HTMLCanvasElement, ev:MouseEvent) {
+function mouseMove(this: HTMLCanvasElement, ev: MouseEvent) {
     let ctx = canvas.getContext("2d");
 
     ctx.save();
@@ -383,28 +389,36 @@ interface TimelineOptions {
 
 export function timeline(options: TimelineOptions) {
     canvas = options.canvas;
+    controls = options.controls;
 
     for (let t of options.threads) {
         threads.push(new Thread(t));
     }
 
-    document.getElementById("pause").addEventListener("click", function(this, ev) {
-        paused = !paused;
-        if (paused) {
-            this.classList.add('active');
-        } else {
-            this.classList.remove('active');
-        }
-    });
+    controls.querySelector("#pause")
+        .addEventListener("click", function (this, ev) {
+            paused = !paused;
+            if (paused) {
+                this.classList.add('active');
+            } else {
+                this.classList.remove('active');
+            }
+        });
 
-    document.getElementById("rate").addEventListener("input", function(this, ev) {
-        msPerTick = Number((<HTMLInputElement>this).value) / 30;
-    });
+    controls.querySelector("#rate")
+        .addEventListener("input", function (this, ev) {
+            msPerTick = Number((<HTMLInputElement>this).value) / tickRate;
+        });
+
+    controls.querySelector("#view")
+        .addEventListener("input", function (this, ev) {
+            msView = Number((<HTMLInputElement>this).value);
+        });
 
     canvas.addEventListener('mousemove', mouseMove);
 
     setInterval(() => {
         tick();
         draw();
-    }, 30);
+    }, tickRate);
 }

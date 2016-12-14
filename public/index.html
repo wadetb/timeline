@@ -13,8 +13,8 @@
     <div class="ui container">
         <canvas id="myCanvas" width="700" height="300" style="border:1px solid #000000;">
         </canvas>
-        <div class="ui grid">
-            <div class="two wide column">
+        <div id="myControls" class="ui grid">
+            <div class="three wide column">
                 <button id="pause" class="ui button">Pause</button>
             </div>
             <div class="four wide column">
@@ -25,16 +25,11 @@
                     </div>
                 </div>
             </div>
-            <div class="three wide column">
-                <div class="ui compact selection dropdown">
-                    <input type="hidden" name="zoom">
-                    <i class="dropdown icon"></i>
-                    <div class="default text">Zoom</div>
-                    <div class="menu">
-                        <div class="item" data-value="1">5.0</div>
-                        <div class="item" data-value="2">16.7</div>
-                        <div class="item" data-value="3">33.3</div>
-                        <div class="item" data-value="4">50.0</div>
+            <div class="four wide column">
+                <div class="ui right labeled input">
+                    <input id="view" type="text" placeholder="View" size="2">
+                    <div class="ui basic label">
+                        ms/page
                     </div>
                 </div>
             </div>
