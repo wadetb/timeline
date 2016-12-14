@@ -153,11 +153,15 @@ export class Thread {
     waitTime = 0;
 }
 
+export let paused = false;
 export let pxPerMs = 10;
 export let msPerTick = 0.25;
 
 function tick() {
-    let msLeft = msPerTick;
+    let msLeft = paused 
+        ? 0 
+        : msPerTick;
+
     while (msLeft > 0) {
 
         for (let t of threads) {
@@ -373,6 +377,7 @@ function mouseMove(this: HTMLCanvasElement, ev:MouseEvent) {
 
 interface TimelineOptions {
     canvas: HTMLCanvasElement;
+    controls: HTMLElement;
     threads: ThreadParams[];
 }
 
@@ -382,6 +387,19 @@ export function timeline(options: TimelineOptions) {
     for (let t of options.threads) {
         threads.push(new Thread(t));
     }
+
+    document.getElementById("pause").addEventListener("click", function(this, ev) {
+        paused = !paused;
+        if (paused) {
+            this.classList.add('active');
+        } else {
+            this.classList.remove('active');
+        }
+    });
+
+    document.getElementById("rate").addEventListener("input", function(this, ev) {
+        msPerTick = Number((<HTMLInputElement>this).value) / 30;
+    });
 
     canvas.addEventListener('mousemove', mouseMove);
 

@@ -73,6 +73,7 @@ function* cpu() {
 (async function run() {
     timeline({
         canvas: <HTMLCanvasElement>document.getElementById("myCanvas"),
+        controls: document.getElementById("myControls"),
         threads: [
             { name: 'vblank', fn: vblank },
             // { name: 'eye', fn: eye },
