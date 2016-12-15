@@ -154,17 +154,17 @@ export class Thread {
     waitTime = 0;
 }
 
-let tickRate = 30;
-
 let paused = false;
+let msPerSec = 5;
+let msView = 50;
+
+let tickRate = 30;
 let pxPerMs = 10;
-let msPerTick = 0.25;
-let msView = 10;
 
 function tick() {
     let msLeft = paused
         ? 0
-        : msPerTick;
+        : msPerSec / tickRate;
 
     while (msLeft > 0) {
 
@@ -381,6 +381,48 @@ function mouseMove(this: HTMLCanvasElement, ev: MouseEvent) {
     ctx.restore();
 }
 
+function togglePaused() {
+    paused = !paused;
+    if (paused) {
+        controls.querySelector("#pause")
+            .classList.add('active');
+    } else {
+        controls.querySelector("#pause")
+            .classList.remove('active');
+    }
+}
+
+function keyPress(this: HTMLCanvasElement, ev: KeyboardEvent) {
+    console.log(ev);
+    if (ev.keyCode == 32) {
+        togglePaused();
+    }
+}
+
+function bind() {
+    controls.querySelector("#pause")
+        .addEventListener("click", function (this, ev) {
+            togglePaused();
+        });
+
+    controls.querySelector("#rate")
+        .setAttribute('value', String(msPerSec));
+    controls.querySelector("#rate")
+        .addEventListener("input", function (this, ev) {
+            msPerSec = Number((<HTMLInputElement>this).value);
+        });
+
+    controls.querySelector("#view")
+        .setAttribute('value', String(msView));
+    controls.querySelector("#view")
+        .addEventListener("input", function (this, ev) {
+            msView = Number((<HTMLInputElement>this).value);
+        });
+
+    canvas.addEventListener('mousemove', mouseMove);
+    canvas.addEventListener('keydown', keyPress);
+}
+
 interface TimelineOptions {
     canvas: HTMLCanvasElement;
     controls: HTMLElement;
@@ -395,27 +437,7 @@ export function timeline(options: TimelineOptions) {
         threads.push(new Thread(t));
     }
 
-    controls.querySelector("#pause")
-        .addEventListener("click", function (this, ev) {
-            paused = !paused;
-            if (paused) {
-                this.classList.add('active');
-            } else {
-                this.classList.remove('active');
-            }
-        });
-
-    controls.querySelector("#rate")
-        .addEventListener("input", function (this, ev) {
-            msPerTick = Number((<HTMLInputElement>this).value) / tickRate;
-        });
-
-    controls.querySelector("#view")
-        .addEventListener("input", function (this, ev) {
-            msView = Number((<HTMLInputElement>this).value);
-        });
-
-    canvas.addEventListener('mousemove', mouseMove);
+    bind();
 
     setInterval(() => {
         tick();
