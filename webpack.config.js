@@ -1,19 +1,16 @@
 module.exports = {
-  entry: ['babel-polyfill', './src/'],
+  entry: './index.ts',
+  mode: 'development',
+  devtool: 'inline-source-map',
   output: {
-    path: './public',
-    filename: 'index.js',
+    filename: 'bundle.js',
   },
   resolve: {
-    extensions: ['', '.js', '.ts'],
+    extensions: [ '.tsx', '.ts', '.js' ]
   },
   module: {
-    loaders: [
-      {
-        test: /\.ts$/,
-        loaders: ['babel-loader', 'ts-loader'],
-        exclude: /node_modules/
-      }
-    ],
+    rules: [
+      { test: /\.tsx?$/, use: 'ts-loader' }
+    ]
   }
 };
