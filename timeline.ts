@@ -155,8 +155,8 @@ export class Thread {
 }
 
 let paused = false;
-let msPerSec = 5;
-let msView = 50;
+let msPerSec = 0.5;
+let msView = 20;
 
 let tickRate = 30;
 let pxPerMs = 10;
@@ -212,25 +212,26 @@ function tick() {
 
 function waitTimePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
     let x1 = e.timestamp * pxPerMs;
-    let x2 = e.startTimestamp * pxPerMs;
-    let x3 = e.waitTimestamp * pxPerMs;
     let y1 = e.thread.y;
-    let y3 = e.waitThread.y;
+    let x2 = e.waitTimestamp * pxPerMs;
+    let y2 = e.waitThread.y;
     ctx.beginPath();
-    ctx.moveTo(x1, y3 + 5);
-    ctx.bezierCurveTo(
-        x1, (y1 * 0.9 + y3 * 0.1) + 5,
-        x2, (y1 * 0.5 + y3 * 0.5) + 5,
-        x2, y1 + 5);
-    ctx.lineTo(x3, y1 + 5);
-    ctx.closePath();
+    ctx.moveTo(x1, y1 + 35);
+    ctx.lineTo(x2, y2 + 35); 
 }
 
-function waitHandlePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
+function waitFromHandlePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
     let x = e.timestamp * pxPerMs;
     let y = e.thread.y;
     ctx.beginPath();
-    ctx.arc(x, y + 5, 5, 0, 2 * Math.PI);
+    ctx.arc(x, y + 35, 5, 0, 2 * Math.PI);
+}
+
+function waitToHandlePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
+    let x = e.waitTimestamp * pxPerMs;
+    let y = e.waitThread.y;
+    ctx.beginPath();
+    ctx.arc(x, y + 35, 5, 0, 2 * Math.PI);
 }
 
 function workPath(ctx: CanvasRenderingContext2D, e: WorkEvent) {
@@ -238,7 +239,7 @@ function workPath(ctx: CanvasRenderingContext2D, e: WorkEvent) {
     let w = (e.duration || t - e.timestamp) * pxPerMs;
     let y = e.thread.y;
     ctx.beginPath();
-    ctx.rect(x, y - 5, w, 20);
+    ctx.rect(x, y - 5, w, 80);
 }
 
 function signalPath(ctx: CanvasRenderingContext2D, e: SignalEvent) {
@@ -266,7 +267,7 @@ function draw() {
         ctx.moveTo(0, t.y + 5);
         ctx.lineTo(canvas.width, t.y + 5);
         ctx.stroke();
-        y += 50;
+        y += 150;
     }
 
     ctx.scale(1, 1);
@@ -274,6 +275,26 @@ function draw() {
 
     ctx.fillStyle = "#808080";
     ctx.fillRect(t * pxPerMs, 0, 1, canvas.height);
+
+    for (let e of workEvents) {
+        ctx.save()
+        workPath(ctx, e);
+        if (e === activeEvent) {
+            ctx.strokeStyle = "yellow";
+            ctx.lineWidth = 4;
+        } else {
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 1;
+        }
+        ctx.fillStyle = e.color || "#780000";
+        ctx.fill();
+        ctx.stroke();
+        ctx.clip();
+        ctx.font = "12px Arial";
+        ctx.fillStyle = "#000000";
+        ctx.fillText(e.name, e.timestamp * pxPerMs + 5, e.thread.y + 10);
+        ctx.restore()
+    }
 
     for (let e of waitEvents) {
         waitTimePath(ctx, e);
@@ -285,20 +306,6 @@ function draw() {
             ctx.lineWidth = 1;
         }
         ctx.fillStyle = "#d0d0d0";
-        ctx.fill();
-        ctx.stroke();
-    }
-
-    for (let e of workEvents) {
-        workPath(ctx, e);
-        if (e === activeEvent) {
-            ctx.strokeStyle = "yellow";
-            ctx.lineWidth = 4;
-        } else {
-            ctx.strokeStyle = "#000000";
-            ctx.lineWidth = 1;
-        }
-        ctx.fillStyle = e.color || "#780000";
         ctx.fill();
         ctx.stroke();
     }
@@ -318,7 +325,6 @@ function draw() {
     }
 
     for (let e of waitEvents) {
-        waitHandlePath(ctx, e);
         if (e === activeEvent) {
             ctx.strokeStyle = "yellow";
             ctx.lineWidth = 4;
@@ -327,6 +333,10 @@ function draw() {
             ctx.lineWidth = 1;
         }
         ctx.fillStyle = "#000000";
+        waitFromHandlePath(ctx, e);
+        ctx.fill();
+        ctx.stroke();
+        waitToHandlePath(ctx, e);
         ctx.fill();
         ctx.stroke();
     }
@@ -372,7 +382,11 @@ function mouseMove(this: HTMLCanvasElement, ev: MouseEvent) {
         }
     }
     for (let e of waitEvents) {
-        waitHandlePath(ctx, e);
+        waitFromHandlePath(ctx, e);
+        if (ctx.isPointInPath(x, y)) {
+            activeEvent = e;
+        }
+        waitToHandlePath(ctx, e);
         if (ctx.isPointInPath(x, y)) {
             activeEvent = e;
         }
