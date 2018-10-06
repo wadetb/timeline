@@ -22,11 +22,11 @@ function* eye() {
 
 // maybe should be called display, this thread controls flipping the display from
 // one display buffer to the other.
-function* flip() {
+function* display() {
     set('display', 1);
     for (let N = 0; ; N++) {
         // wait for the gpu to queue a flip
-        yield wait('queued_flip', N);
+        yield wait('queue flip', N);
         // wait for the vblank
         yield wait('vblank', 'changed');
         // flip the display
@@ -43,32 +43,36 @@ interface DrawList {
     gpuMs: number;
 };
 
+const POWERPOINT_PALETTE = ['#4472c4', '#000000', '#ed7d31', '#a5a5a5', '#ffc000', '#70ad47'];
+
+let palette = POWERPOINT_PALETTE;
+
 // the scene is divided into a bunch of arbitrary work units called draw lists, mostly to
 // demonstrate multithreading later. this isn't part of the overall framework, just something
 // local to this demo.
 let drawLists: DrawList[] = [
-    { name: 'shadows', color: 'gray', cpuMs: 1.0, gpuMs: 1.0 },
-    { name: 'prepass', color: 'darkgray', cpuMs: 1.0, gpuMs: 2.0 },
-    { name: 'opaque', color: 'blue', cpuMs: 3.0, gpuMs: 6.0 },
-    { name: 'translucents', color: 'yellow', cpuMs: 1.0, gpuMs: 1.0 },
-    { name: 'postfx', color: 'purple', cpuMs: 0.25, gpuMs: 10.0 },
-    { name: 'ui', color: 'cyan', cpuMs: 1.0, gpuMs: 1.0 },
+    { name: 'Shadows', color: palette[0], cpuMs: 1.0, gpuMs: 1.0 },
+    { name: 'Prepass', color: palette[1], cpuMs: 1.0, gpuMs: 2.0 },
+    { name: 'Opaque', color: palette[2], cpuMs: 3.0, gpuMs: 6.0 },
+    { name: 'Translucents', color: palette[3], cpuMs: 1.0, gpuMs: 1.0 },
+    { name: 'PostFX', color: palette[4], cpuMs: 0.25, gpuMs: 1.0 },
+    { name: 'UI', color: palette[5], cpuMs: 1.0, gpuMs: 1.0 },
 ];
 
 function* gpu() {
     for (let N = 0; ; N++) {
         for (let list of drawLists) {
             // wait for CPU to finish submitting draw list
-            yield wait(`cpu_${list.name}`, N);
+            yield wait(`cpu ${list.name}`, N);
             // ui waits for display to be ready
             if (list.name == 'ui') {
                 yield wait('display', (N & 1) ^ 1);
             }
             // do drawing
-            yield work(`gpu_${list.name}`, list.color, list.gpuMs, N);
+            yield work(`gpu ${list.name}`, list.name, list.color, list.gpuMs, N);
         }
         // all drawing done, queue the page flip
-        signal('queued_flip', N);
+        signal('queue flip', N);
     }
 }
 
@@ -77,16 +81,16 @@ function* cpu() {
     let lastFrame = -Infinity;
     for (let N = 0; ; N++) {
         // limit framerate
-        yield wait(() => t - lastFrame < 1000 / maxFps);
+        yield wait(function throttleFPS() { return t - lastFrame < 1000 / maxFps });
         lastFrame = t;
         // TODO: controller throttle goes here
         for (let list of drawLists) {
             if (N > 0) {
                 // wait for gpu to finish using buffers from the previous frame
-                yield wait(`gpu_${list.name}`, N - 1);
+                yield wait(`gpu ${list.name}`, N - 1);
             }
             // fill buffers and submit draw commands
-            yield work(`cpu_${list.name}`, list.color, list.cpuMs, N);
+            yield work(`cpu ${list.name}`, list.name, list.color, list.cpuMs, N);
         }
     }
 }
@@ -98,9 +102,9 @@ function* cpu() {
         threads: [
             { name: 'vblank', fn: vblank },
             // { name: 'eye', fn: eye },
-            { name: 'flip', fn: flip },
+            { name: 'display', fn: display },
             { name: 'gpu', fn: gpu },
             { name: 'cpu', fn: cpu }
         ]
     })
-} ());
+}());
