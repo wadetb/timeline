@@ -14,8 +14,12 @@ let dragStartT = 0;
 let dragStartX = 0;
 
 var threads: Thread[] = [];
+var buffers: Buffer[] = [];
+
 var canvas: HTMLCanvasElement;
 var controls: HTMLElement;
+
+var ctx: CanvasRenderingContext2D;
 
 interface Value {
     thread: Thread;
@@ -54,6 +58,7 @@ export let inspect = {};
 
 let runningThread = null;
 let activeEvent = null;
+let errorMessage = null;
 
 export function signal(key: string, value?: number) {
     if (runningThread.name in inspect) {
@@ -72,6 +77,17 @@ export function set(key: string, value: number) {
         console.log(`${runningThread.name}: set ${key} => ${value}`);
     }
     values[key] = { thread: runningThread, timestamp: t, value: value };
+}
+
+export function get(key: string): number {
+    if (!(key in values)) {
+        throw new Error(`Cannot get nonexistent value: ${key}`);
+    }
+    const value = values[key].value;
+    if (runningThread.name in inspect) {
+        console.log(`${runningThread.name}: get ${key} => ${value}`);
+    }
+    return value;
 }
 
 export function* wait(keyOrMsOrFn: string | number | Function, value?: number | string) {
@@ -107,7 +123,7 @@ export function* wait(keyOrMsOrFn: string | number | Function, value?: number | 
                     }
                 }
             } else {
-                throw new Error("Expected number or 'changed' for value.");
+                throw new Error(`Expected number or 'changed' for value of ${keyOrMsOrFn}, got: ${value}`);
             }
         } else {
             while (!(keyOrMsOrFn in values)) {
@@ -154,7 +170,7 @@ export function* wait(keyOrMsOrFn: string | number | Function, value?: number | 
         w.waitTimestamp = t;
 
     } else {
-        throw new Error("Invalid input.");
+        throw new Error(`Invalid wait input: ${keyOrMsOrFn}`);
     }
 }
 
@@ -175,6 +191,68 @@ export function* work(name: string, title: string, color: string, ms: number, va
     yield ms;
     e.duration = ms;
     values[name] = { thread: runningThread, timestamp: t, value: value };
+}
+
+export interface BufferParams {
+    name: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+export class Buffer {
+    readonly name: string;
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+    constructor(params: BufferParams) {
+        this.name = params.name;
+        this.x = params.x;
+        this.y = params.y;
+        this.width = params.width;
+        this.height = params.height;
+        this.image = ctx.createImageData(this.width, this.height);
+    }
+    image = null;
+    thread = null;
+    transitionY = 0;
+}
+
+export function acquire(name: string) {
+    if (runningThread.name in inspect) {
+        console.log(`${runningThread.name}: acquire ${name}`);
+    }
+    for (let b of buffers) {
+        if (b.name == name) {
+            if (b.thread != null) {
+                throw new Error(`Tried to aquire ${name}, but it is owned by ${b.thread.name}.`);
+            }
+            b.thread = runningThread;
+            return;
+        }
+    }
+    throw new Error(`Cannot acquire nonexistent buffer: ${name}`);
+}
+
+export function release(name: string) {
+    if (runningThread.name in inspect) {
+        console.log(`${runningThread.name}: release ${name}`);
+    }
+    for (let b of buffers) {
+        if (b.name == name) {
+            if (b.thread == null) {
+                throw new Error(`Tried to release ${name}, but it is not owned.`);
+            }
+            if (b.thread != runningThread) {
+                throw new Error(`Tried to release ${name}, but it is owned by ${b.thread.name}.`);
+            }
+            b.thread = null;
+            return;
+        }
+    }
+    throw new Error(`Cannot release nonexistent buffer: ${name}`);
 }
 
 export interface ThreadParams {
@@ -200,55 +278,74 @@ function tick() {
         ? 0
         : msPerSec / tickRate;
 
-    if (!dragging && (t - startT) * pxPerMs > canvas.width - 20) {
+    if (errorMessage != null) {
+        return;
+    }
+
+    if (!dragging && (t - startT) * pxPerMs > canvas.width - 400) {
         startT += msLeft;
     }
 
-    while (msLeft > 0) {
+    runningThread = null;
+    errorMessage = null;
 
-        for (let t of threads) {
-            if (t.waitTime == 0) {
-                runningThread = t;
-                for (; ;) {
-                    let v = t.stack[t.stack.length - 1].next();
-                    if (v.done) {
-                        t.stack.pop();
-                    } else if (typeof v.value.next === 'function') {
-                        t.stack.push(v.value);
-                    } else if (typeof v.value === 'number') {
-                        t.waitTime = v.value;
-                        break;
-                    } else {
-                        throw new Error("Generators are expected to return a number or another generator.")
+    try {
+
+        // if (t > 5) {
+        //     throw new Error("YO YO YO");
+        // }
+
+        while (msLeft > 0) {
+
+            for (let t of threads) {
+                if (t.waitTime == 0) {
+                    runningThread = t;
+                    for (; ;) {
+                        let v = t.stack[t.stack.length - 1].next();
+                        if (v.done) {
+                            t.stack.pop();
+                        } else if (typeof v.value.next === 'function') {
+                            t.stack.push(v.value);
+                        } else if (typeof v.value === 'number') {
+                            t.waitTime = v.value;
+                            break;
+                        } else {
+                            throw new Error("Generators are expected to return 0, a time in milliseconds, or another generator.")
+                        }
                     }
                 }
             }
-        }
 
-        let shortest = Number.POSITIVE_INFINITY;
-        for (let t of threads) {
-            if (t.waitTime > 0 && t.waitTime < shortest) {
-                shortest = t.waitTime;
+            let shortest = Number.POSITIVE_INFINITY;
+            for (let t of threads) {
+                if (t.waitTime > 0 && t.waitTime < shortest) {
+                    shortest = t.waitTime;
+                }
             }
-        }
-        if (shortest == Number.POSITIVE_INFINITY) {
-            throw new Error("No thread made progress.");
-        }
-
-        shortest = Math.min(shortest, msLeft);
-
-        for (let t of threads) {
-            if (t.waitTime > 0) {
-                t.waitTime -= shortest;
+            if (shortest == Number.POSITIVE_INFINITY) {
+                throw new Error("No thread made progress.");
             }
+
+            shortest = Math.min(shortest, msLeft);
+
+            for (let t of threads) {
+                if (t.waitTime > 0) {
+                    t.waitTime -= shortest;
+                }
+            }
+
+            msLeft -= shortest;
+            t += shortest;
         }
 
-        msLeft -= shortest;
-        t += shortest;
+    } catch (err) {
+        errorMessage = err.message;
+        console.log((runningThread ? `In thread ${runningThread.name}: ` : '') + err.message);
+        console.log(err.stack);
     }
 }
 
-function waitTimePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
+function waitTimePath(e: WaitEvent) {
     let x1 = e.timestamp * pxPerMs;
     let y1 = e.thread.y;
     let x2 = (e.waitTimestamp ? e.waitTimestamp : t) * pxPerMs;
@@ -256,14 +353,14 @@ function waitTimePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
     ctx.rect(x1, y1 + 30, x2 - x1, 20);
 }
 
-function waitHandlePath(ctx: CanvasRenderingContext2D, e: WaitEvent) {
+function waitHandlePath(e: WaitEvent) {
     let x = e.waitTimestamp * pxPerMs;
     let y = e.waitThread.y;
     ctx.beginPath();
     ctx.arc(x, y + 10, 5, 0, 2 * Math.PI);
 }
 
-function workPath(ctx: CanvasRenderingContext2D, e: WorkEvent) {
+function workPath(e: WorkEvent) {
     let x = e.timestamp * pxPerMs;
     let w = (e.duration || t - e.timestamp) * pxPerMs;
     let y = e.thread.y;
@@ -271,7 +368,7 @@ function workPath(ctx: CanvasRenderingContext2D, e: WorkEvent) {
     ctx.rect(x, y + 2, w, 80);
 }
 
-function signalPath(ctx: CanvasRenderingContext2D, e: SignalEvent) {
+function signalPath(e: SignalEvent) {
     let x = e.timestamp * pxPerMs;
     let y = e.thread.y;
     ctx.beginPath();
@@ -348,31 +445,37 @@ function lightenColor(color: string, amount: number) {
 function draw() {
     pxPerMs = canvas.width / msView;
 
-    let ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
 
-    let y = 80;
+    let y = 100;
     for (let t of threads) {
         t.y = y;
+        ctx.strokeStyle = "#c0c0c0";
         ctx.beginPath();
-        ctx.moveTo(0, t.y + 5);
-        ctx.lineTo(canvas.width, t.y + 5);
+        ctx.moveTo(0, t.y + 1);
+        ctx.lineTo(canvas.width, t.y + 1);
         ctx.stroke();
-        y += 150;
+        y += 280;
     }
 
     ctx.scale(1, 1);
     ctx.translate(-startT * pxPerMs, 0);
 
+    ctx.save();
     ctx.fillStyle = "#808080";
     ctx.fillRect(t * pxPerMs, 0, 1, canvas.height);
+    ctx.font = "italic 44px Calibri";
+    ctx.textAlign = 'left'
+    ctx.fillStyle = "#808080";
+    ctx.fillText("t", t * pxPerMs + 5, 45);
+    ctx.restore();
 
     for (let e of waitEvents) {
         if (e.waitTimestamp == null || e.waitTimestamp > e.timestamp) {
             ctx.save()
-            waitTimePath(ctx, e);
+            waitTimePath(e);
             if (e === activeEvent) {
                 ctx.strokeStyle = "yellow";
                 ctx.lineWidth = 4;
@@ -393,12 +496,12 @@ function draw() {
 
     for (let e of workEvents) {
         ctx.save()
-        workPath(ctx, e);
+        workPath(e);
         if (e === activeEvent) {
             ctx.strokeStyle = "yellow";
             ctx.lineWidth = 2;
         } else {
-            ctx.strokeStyle = lightenColor(e.color, 0.9);
+            ctx.strokeStyle = e.color; //lightenColor(e.color, 0.9);
             ctx.lineWidth = 2;
         }
         ctx.fillStyle = e.color || "#780000";
@@ -413,7 +516,7 @@ function draw() {
 
     for (let e of signalEvents) {
         ctx.save();
-        signalPath(ctx, e);
+        signalPath(e);
         if (e === activeEvent) {
             ctx.strokeStyle = "yellow";
             ctx.lineWidth = 4;
@@ -443,25 +546,56 @@ function draw() {
                 ctx.lineWidth = 1;
             }
             ctx.fillStyle = "#f0f0f0";
-            waitHandlePath(ctx, e);
+            waitHandlePath(e);
             ctx.fill();
             ctx.stroke();
             ctx.restore();
         }
     }
 
+    for (let b of buffers) {
+        const x = t * pxPerMs + 40;
+        const targetY = b.thread != null ? b.thread.y : 235;
+        b.transitionY = b.transitionY * 0.8 + targetY * 0.2;
+        const y = b.transitionY - 5;
+        ctx.save();
+        ctx.strokeStyle = "#404040";
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#f0f0f0";
+        ctx.beginPath();
+        ctx.rect(x + b.x, y + b.y, b.width, b.height);
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = "12px Consolas";
+        ctx.fillStyle = "#000000";
+        ctx.strokeStyle = "#000000";
+        ctx.textAlign = 'center'
+        ctx.fillText(b.name, x + b.x + b.width / 2, y + b.y - 10);
+        ctx.restore();
+    }
+
+    if (errorMessage != null) {
+        let y = runningThread != null ? runningThread.y - 15 : 45;
+        ctx.font = runningThread != null ? "bold 22px Consolas" : "40px Consolas";
+        ctx.fillStyle = "#ff0000";
+        ctx.textAlign = 'right'
+        let text = runningThread != null 
+            ? `THREAD ERROR: ${errorMessage} - see JavaScript console for callstack`
+            : 'ERROR: ' + errorMessage;
+        ctx.fillText(text, t * pxPerMs - 10, y);
+    }
+
     ctx.restore();
 
     for (let t of threads) {
-        ctx.font = "56px Arial";
+        ctx.font = "56px Calibri";
         ctx.fillStyle = "#000000";
-        ctx.fillText(t.name, 2, t.y);
+        ctx.textAlign = 'left'
+        ctx.fillText(t.name, 2, t.y - 10);
     }
 }
 
 function mouseMove(this: HTMLCanvasElement, ev: MouseEvent) {
-    let ctx = canvas.getContext("2d");
-
     let rect = canvas.getBoundingClientRect();
     let canvasX = ev.clientX - rect.left;
     let canvasY = ev.clientY - rect.top;
@@ -479,20 +613,20 @@ function mouseMove(this: HTMLCanvasElement, ev: MouseEvent) {
     activeEvent = null;
     for (let e of waitEvents) {
         if (e.waitTimestamp == null || e.waitTimestamp > e.timestamp) {
-            waitTimePath(ctx, e);
+            waitTimePath(e);
             if (ctx.isPointInPath(x, y)) {
                 activeEvent = e;
             }
         }
     }
     for (let e of workEvents) {
-        workPath(ctx, e);
+        workPath(e);
         if (ctx.isPointInPath(x, y)) {
             activeEvent = e;
         }
     }
     for (let e of signalEvents) {
-        signalPath(ctx, e);
+        signalPath(e);
         if (ctx.isPointInPath(x, y)) {
             activeEvent = e;
         }
@@ -500,7 +634,7 @@ function mouseMove(this: HTMLCanvasElement, ev: MouseEvent) {
     for (let e of waitEvents) {
         if (e.waitTimestamp != null && e.waitTimestamp > e.timestamp) {
             if (e.waitTimestamp) {
-                waitHandlePath(ctx, e);
+                waitHandlePath(e);
                 if (ctx.isPointInPath(x, y)) {
                     activeEvent = e;
                 }
@@ -599,14 +733,23 @@ interface TimelineOptions {
     canvas: HTMLCanvasElement;
     controls: HTMLElement;
     threads: ThreadParams[];
+    buffers?: BufferParams[];
 }
 
 export function timeline(options: TimelineOptions) {
     canvas = options.canvas;
     controls = options.controls;
 
+    ctx = canvas.getContext("2d");
+
     for (let t of options.threads) {
         threads.push(new Thread(t));
+    }
+
+    if (options.buffers) {
+        for (let b of options.buffers) {
+            buffers.push(new Buffer(b));
+        }
     }
 
     bind();
