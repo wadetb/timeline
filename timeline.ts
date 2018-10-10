@@ -3,7 +3,7 @@ export let t = 0;
 let startT = -2;
 
 let paused = false;
-let msPerSec = 0.5;
+let msPerSec = 1;
 let msView = 20;
 
 let tickRate = 30;
@@ -449,7 +449,7 @@ function draw() {
 
     ctx.save();
 
-    let y = 100;
+    let y = 160;
     for (let t of threads) {
         t.y = y;
         ctx.strokeStyle = "#c0c0c0";
@@ -457,7 +457,7 @@ function draw() {
         ctx.moveTo(0, t.y + 1);
         ctx.lineTo(canvas.width, t.y + 1);
         ctx.stroke();
-        y += 280;
+        y += 220;
     }
 
     ctx.scale(1, 1);
@@ -555,7 +555,7 @@ function draw() {
 
     for (let b of buffers) {
         const x = t * pxPerMs + 40;
-        const targetY = b.thread != null ? b.thread.y : 235;
+        const targetY = b.thread != null ? b.thread.y + 25 : 160+110;
         b.transitionY = b.transitionY * 0.8 + targetY * 0.2;
         const y = b.transitionY - 5;
         ctx.save();
@@ -570,7 +570,7 @@ function draw() {
         ctx.fillStyle = "#000000";
         ctx.strokeStyle = "#000000";
         ctx.textAlign = 'center'
-        ctx.fillText(b.name, x + b.x + b.width / 2, y + b.y - 10);
+        ctx.fillText(b.name, x + b.x + b.width / 2, y + b.y - 5);
         ctx.restore();
     }
 
@@ -579,7 +579,7 @@ function draw() {
         ctx.font = runningThread != null ? "bold 22px Consolas" : "40px Consolas";
         ctx.fillStyle = "#ff0000";
         ctx.textAlign = 'right'
-        let text = runningThread != null 
+        let text = runningThread != null
             ? `THREAD ERROR: ${errorMessage} - see JavaScript console for callstack`
             : 'ERROR: ' + errorMessage;
         ctx.fillText(text, t * pxPerMs - 10, y);
@@ -652,17 +652,20 @@ function mouseDown(this: HTMLCanvasElement, ev: MouseEvent) {
     dragging = true;
     dragStartT = startT;
     dragStartX = canvasX;
-
-    if (!paused) {
-        paused = true;
-    } else {
-        paused = false;
-    }
 }
 
 function mouseUp(this: HTMLCanvasElement, ev: MouseEvent) {
-    if (dragging) {
-        dragging = false;
+    if (!dragging) {
+        return;
+    }
+
+    dragging = false;
+
+    let rect = canvas.getBoundingClientRect();
+    let canvasX = ev.clientX - rect.left;
+
+    if (Math.abs(canvasX - dragStartX) < 5) {
+        setPaused(!paused);
     }
 }
 
@@ -682,38 +685,54 @@ function mouseWheel(this: HTMLCanvasElement, ev: WheelEvent) {
 function setMsView(value: number) {
     msView = value;
     controls.querySelector("#view")
-        .setAttribute('value', String(msView));
+        .setAttribute('value', String(Math.round(msView * 10) / 10));
 }
 
-function togglePaused() {
-    paused = !paused;
-    if (paused) {
-        controls.querySelector("#pause")
-            .classList.add('active');
-    } else {
-        controls.querySelector("#pause")
-            .classList.remove('active');
-    }
+function setPaused(newPaused: boolean) {
+    paused = newPaused;
+
+    controls.querySelectorAll("#pause > i").forEach((item) => {
+        if (paused) {
+            item.classList.remove('pause');
+            item.classList.add('play');
+        } else {
+            item.classList.remove('play');
+            item.classList.add('pause');
+        }
+    });
+}
+
+function setMsPerSec(newMsPerSec: number) {
+    msPerSec = newMsPerSec;
+
+    controls.querySelectorAll("#rate").forEach((button) => {
+        if (button.textContent == String(msPerSec)) {
+            button.classList.add('active');
+        } else {
+            button.classList.remove('active');
+        }
+    });
 }
 
 function keyPress(this: HTMLCanvasElement, ev: KeyboardEvent) {
     if (ev.keyCode == 32) {
-        togglePaused();
+        setPaused(!paused);
     }
 }
 
 function bind() {
     controls.querySelector("#pause")
         .addEventListener("click", function (this, ev) {
-            togglePaused();
+            setPaused(!paused);
         });
+    setPaused(paused);
 
-    controls.querySelector("#rate")
-        .setAttribute('value', String(msPerSec));
-    controls.querySelector("#rate")
-        .addEventListener("input", function (this, ev) {
-            msPerSec = Number((<HTMLInputElement>this).value);
-        });
+    controls.querySelectorAll("#rate").forEach((item) =>
+        item.addEventListener("click", function (this, ev) {
+            const button = (<HTMLButtonElement>this);
+            setMsPerSec(Number(button.textContent));
+        }));
+    setMsPerSec(msPerSec);
 
     controls.querySelector("#view")
         .setAttribute('value', String(msView));

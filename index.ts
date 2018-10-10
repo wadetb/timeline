@@ -6,7 +6,7 @@ function* display() {
     let lastQueueFlip = -1;
     let displayBuffer = 0;
     set('display', displayBuffer);
-    acquire(`frame buffer ${displayBuffer}`);
+    acquire(`frameBuffer${displayBuffer}`);
     for (let N = 0; ; N++) {
         // wait for the vblank
         yield work('scanout', 'Scan out', displayBuffer == 0 ? '#6060a0' : displayBuffer == 1 ?  '#8080F0' : '#808000', 16.66666667);
@@ -18,10 +18,10 @@ function* display() {
 
             // get('foo');
 
-            release(`frame buffer ${displayBuffer}`);
+            release(`frameBuffer${displayBuffer}`);
             displayBuffer = (displayBuffer + 1) % 3;
             set('display', displayBuffer);
-            acquire(`frame buffer ${displayBuffer}`);
+            acquire(`frameBuffer${displayBuffer}`);
 
             // signal that the flip has occured
             signal('flip', N);
@@ -62,12 +62,12 @@ function* gpu() {
             // ui waits for display to be ready
             if (list.name == 'Shadows') {
                 yield wait(function displayXXX() { return get('display') == displayBuffer });
-                acquire(`frame buffer ${displayBuffer}`);
+                acquire(`frameBuffer${displayBuffer}`);
             }
             // do drawing
             yield work(`GPU ${list.name}`, list.name, list.color, list.gpuMs, N);
             if (list.name == 'UI') {
-                release(`frame buffer ${displayBuffer}`);
+                release(`frameBuffer${displayBuffer}`);
                 displayBuffer = (displayBuffer + 1) % 3;
             }
         }
@@ -105,9 +105,9 @@ function* cpu() {
             { name: 'CPU', fn: cpu }
         ],
         buffers: [
-            { name: 'frame buffer 0', x: 0, y: 0, width: 100, height: 100 },
-            { name: 'frame buffer 1', x: 110, y: 0, width: 100, height: 100 },
-            { name: 'frame buffer 2', x: 220, y: 0, width: 100, height: 100 }
+            { name: 'frameBuffer0', x: 0, y: 0, width: 100, height: 56 },
+            { name: 'frameBuffer1', x: 110, y: 0, width: 100, height: 56 },
+            { name: 'frameBuffer2', x: 220, y: 0, width: 100, height: 56 }
         ]
     })
 }());
