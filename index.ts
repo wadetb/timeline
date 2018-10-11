@@ -1,4 +1,4 @@
-import { get, set, signal, wait, work, t, timeline, acquire, release } from './timeline';
+import { get, set, signal, wait, work, t, timeline, acquire, release, clear, drawRect } from './timeline';
 
 // maybe should be called display, this thread controls flipping the display from
 // one display buffer to the other.
@@ -54,7 +54,7 @@ let drawLists: DrawList[] = [
 
 function* gpu() {
     set('queue flip', -1);
-    let displayBuffer = 1;
+    let displayBuffer = 1;   
     for (let N = 0; ; N++) {
         for (let list of drawLists) {
             // wait for CPU to finish submitting draw list
@@ -63,6 +63,8 @@ function* gpu() {
             if (list.name == 'Shadows') {
                 yield wait(function displayXXX() { return get('display') == displayBuffer });
                 acquire(`frameBuffer${displayBuffer}`);
+                clear(`frameBuffer${displayBuffer}`, '#000000');
+                drawRect(`frameBuffer${displayBuffer}`, (N % 20) * 5, 20, 10, 10, '#ffffff');
             }
             // do drawing
             yield work(`GPU ${list.name}`, list.name, list.color, list.gpuMs, N);

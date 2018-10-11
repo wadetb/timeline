@@ -214,13 +214,44 @@ export class Buffer {
         this.y = params.y;
         this.width = params.width;
         this.height = params.height;
-        this.image = ctx.createImageData(this.width, this.height);
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        this.ctx = this.canvas.getContext('2d');
     }
-    image = null;
-    thread = null;
-    currentY = 0;
-    transitionY = 0;
-    transitionFrame = 0;
+    canvas: HTMLCanvasElement = null;
+    ctx: CanvasRenderingContext2D = null;
+    thread: Thread = null;
+    currentY: number = 0;
+    transitionY: number = 0;
+    transitionFrame: number = 0;
+}
+
+export function drawOn(name: string): CanvasRenderingContext2D {
+    for (let b of buffers) {
+        if (b.name == name) {
+            if (b.thread == null) {
+                throw new Error(`Tried to draw on buffer ${name}, but it is not owned.`);
+            }
+            if (b.thread != runningThread) {
+                throw new Error(`Tried to draw on buffer ${name}, but it is owned by ${b.thread.name}.`);
+            }
+            return b.ctx;
+        }
+    }
+    throw new Error(`Cannot draw on nonexistent buffer: ${name}`);
+}
+
+export function clear(name: string, color: string) {
+    const ctx = drawOn(name);
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1000, 1000);
+}
+
+export function drawRect(name: string, x: number, y: number, w: number, h: number, color: string) {
+    const ctx = drawOn(name);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
 }
 
 export function acquire(name: string) {
@@ -580,14 +611,15 @@ function draw() {
         ctx.lineWidth = 1;
         ctx.fillStyle = "#f0f0f0";
         ctx.beginPath();
-        ctx.rect(x + b.x, y + b.y, b.width, b.height);
+        ctx.rect(x + b.x, y + b.y, b.width + 2, b.height + 2);
         ctx.fill();
         ctx.stroke();
         ctx.font = "12px Consolas";
         ctx.fillStyle = "#000000";
         ctx.strokeStyle = "#000000";
         ctx.textAlign = 'center'
-        ctx.fillText(b.name, x + b.x + b.width / 2, y);
+        ctx.fillText(b.name, x + b.x + b.width / 2, y - 2);
+        ctx.drawImage(b.canvas, x + b.x + 1, y + b.y + 1)
         ctx.restore();
     }
 
