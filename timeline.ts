@@ -1,6 +1,7 @@
 export let t = 0;
 
 let startT = -2;
+let frame = 0;
 
 let paused = false;
 let msPerSec = 1;
@@ -217,7 +218,9 @@ export class Buffer {
     }
     image = null;
     thread = null;
+    currentY = 0;
     transitionY = 0;
+    transitionFrame = 0;
 }
 
 export function acquire(name: string) {
@@ -229,6 +232,8 @@ export function acquire(name: string) {
             if (b.thread != null) {
                 throw new Error(`Tried to aquire ${name}, but it is owned by ${b.thread.name}.`);
             }
+            b.transitionFrame = frame;
+            b.transitionY = b.currentY;
             b.thread = runningThread;
             return;
         }
@@ -248,6 +253,8 @@ export function release(name: string) {
             if (b.thread != runningThread) {
                 throw new Error(`Tried to release ${name}, but it is owned by ${b.thread.name}.`);
             }
+            b.transitionFrame = frame;
+            b.transitionY = b.currentY;
             b.thread = null;
             return;
         }
@@ -442,6 +449,15 @@ function lightenColor(color: string, amount: number) {
     return formatColor(hslToRGB([h, s, l]));
 }
 
+function lerp(a: number, b: number, t: number) {
+    return b*t + a*(1-t);
+}
+
+function smoothstep(e0: number, e1: number, a: number) {
+    const b = Math.min(1.0, Math.max(0.0, (a - e0) / (e1 - e0)));
+    return b * b * (3 - 2 * b);
+}
+
 function draw() {
     pxPerMs = canvas.width / msView;
 
@@ -555,9 +571,10 @@ function draw() {
 
     for (let b of buffers) {
         const x = t * pxPerMs + 40;
-        const targetY = b.thread != null ? b.thread.y + 25 : 160+110;
-        b.transitionY = b.transitionY * 0.8 + targetY * 0.2;
-        const y = b.transitionY - 5;
+        const targetY = b.thread != null ? b.thread.y + 25 : 160 + 110;
+        const l = smoothstep(b.transitionFrame, b.transitionFrame + 5, frame);
+        const y = lerp(b.transitionY, targetY, l);
+        b.currentY = y;
         ctx.save();
         ctx.strokeStyle = "#404040";
         ctx.lineWidth = 1;
@@ -570,7 +587,7 @@ function draw() {
         ctx.fillStyle = "#000000";
         ctx.strokeStyle = "#000000";
         ctx.textAlign = 'center'
-        ctx.fillText(b.name, x + b.x + b.width / 2, y + b.y - 5);
+        ctx.fillText(b.name, x + b.x + b.width / 2, y);
         ctx.restore();
     }
 
@@ -593,6 +610,8 @@ function draw() {
         ctx.textAlign = 'left'
         ctx.fillText(t.name, 2, t.y - 10);
     }
+
+    frame++;
 }
 
 function mouseMove(this: HTMLCanvasElement, ev: MouseEvent) {
