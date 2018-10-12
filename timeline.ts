@@ -163,9 +163,7 @@ export function* wait(keyOrMsOrFn: string | number | Function, value?: number | 
         };
         waitEvents.push(w);
 
-        while (keyOrMsOrFn()) {
-            yield 0;
-        }
+        yield keyOrMsOrFn();
 
         w.waitThread = runningThread;
         w.waitTimestamp = t;
@@ -175,9 +173,9 @@ export function* wait(keyOrMsOrFn: string | number | Function, value?: number | 
     }
 }
 
-export function* work(name: string, title: string, color: string, ms: number, value?: number) {
+export function* work(name: string, title: string, color: string, msOrFn: number|Function, value?: number) {
     if (runningThread.name in inspect) {
-        console.log(`${runningThread.name}: work ${name} ${ms}ms => ${value}`);
+        console.log(`${runningThread.name}: work ${name} ${msOrFn} => ${value}`);
     }
     let e = {
         name: name,
@@ -189,17 +187,23 @@ export function* work(name: string, title: string, color: string, ms: number, va
         duration: undefined
     }
     workEvents.push(e);
-    yield ms;
-    e.duration = ms;
+    let startT = t;
+    if (typeof msOrFn === 'function') {
+        yield msOrFn();
+    } else {
+        yield msOrFn;
+    }
+    e.duration = t - startT;
     values[name] = { thread: runningThread, timestamp: t, value: value };
 }
 
-export interface BufferParams {
+export class BufferParams {
     name: string;
     x: number;
     y: number;
     width: number;
     height: number;
+    scale?: number;
 }
 
 export class Buffer {
@@ -208,12 +212,14 @@ export class Buffer {
     readonly y: number;
     readonly width: number;
     readonly height: number;
+    readonly scale: number;
     constructor(params: BufferParams) {
         this.name = params.name;
         this.x = params.x;
         this.y = params.y;
         this.width = params.width;
         this.height = params.height;
+        this.scale = params.scale;
         this.canvas = document.createElement('canvas');
         this.canvas.width = this.width;
         this.canvas.height = this.height;
@@ -223,23 +229,31 @@ export class Buffer {
     ctx: CanvasRenderingContext2D = null;
     thread: Thread = null;
     currentY: number = 0;
+    currentAlpha: number = 0;
     transitionY: number = 0;
+    transitionAlpha: number = 0;
     transitionFrame: number = 0;
 }
 
-export function drawOn(name: string): CanvasRenderingContext2D {
+export function getBuffer(name: string) : Buffer {
     for (let b of buffers) {
         if (b.name == name) {
-            if (b.thread == null) {
-                throw new Error(`Tried to draw on buffer ${name}, but it is not owned.`);
-            }
-            if (b.thread != runningThread) {
-                throw new Error(`Tried to draw on buffer ${name}, but it is owned by ${b.thread.name}.`);
-            }
-            return b.ctx;
+            return b;
         }
     }
-    throw new Error(`Cannot draw on nonexistent buffer: ${name}`);
+
+    throw new Error(`Cannot use nonexistent buffer: ${name}`);
+}
+
+export function drawOn(name: string): CanvasRenderingContext2D {
+    const b = getBuffer(name);
+    if (b.thread == null) {
+        throw new Error(`Tried to draw on buffer ${name}, but it is not owned.`);
+    }
+    if (b.thread != runningThread) {
+        throw new Error(`Tried to draw on buffer ${name}, but it is owned by ${b.thread.name}.`);
+    }
+    return b.ctx;
 }
 
 export function clear(name: string, color: string) {
@@ -254,6 +268,18 @@ export function drawRect(name: string, x: number, y: number, w: number, h: numbe
     ctx.fillRect(x, y, w, h);
 }
 
+export function drawFrom(name: string, x: number, y: number, sourceName: string, sx: number, sy: number, sw: number, sh: number) {
+    const ctx = drawOn(name);
+    const srcB = getBuffer(sourceName);
+    if (srcB.thread == null) {
+        throw new Error(`Tried to draw from buffer ${sourceName}, but it is not owned.`);
+    }
+    if (srcB.thread != runningThread) {
+        throw new Error(`Tried to draw from buffer ${sourceName}, but it is owned by ${srcB.thread.name}.`);
+    }
+    ctx.drawImage(srcB.canvas, sx, sy, sw, sh, x, y, sw, sh)
+}
+
 export function acquire(name: string) {
     if (runningThread.name in inspect) {
         console.log(`${runningThread.name}: acquire ${name}`);
@@ -265,6 +291,7 @@ export function acquire(name: string) {
             }
             b.transitionFrame = frame;
             b.transitionY = b.currentY;
+            b.transitionAlpha = b.currentAlpha;
             b.thread = runningThread;
             return;
         }
@@ -296,17 +323,19 @@ export function release(name: string) {
 export interface ThreadParams {
     name: string;
     fn: any;
+    y: number;
 }
 
 export class Thread {
     readonly name: string;
     readonly fn: any;
+    readonly y: number;
     constructor(params: ThreadParams) {
         this.name = params.name;
         this.fn = params.fn;
+        this.y = params.y;
         this.stack = [this.fn()];
     }
-    y = 0;
     stack: any[];
     waitTime = 0;
 }
@@ -481,7 +510,7 @@ function lightenColor(color: string, amount: number) {
 }
 
 function lerp(a: number, b: number, t: number) {
-    return b*t + a*(1-t);
+    return b * t + a * (1 - t);
 }
 
 function smoothstep(e0: number, e1: number, a: number) {
@@ -496,15 +525,12 @@ function draw() {
 
     ctx.save();
 
-    let y = 160;
     for (let t of threads) {
-        t.y = y;
         ctx.strokeStyle = "#c0c0c0";
         ctx.beginPath();
         ctx.moveTo(0, t.y + 1);
         ctx.lineTo(canvas.width, t.y + 1);
         ctx.stroke();
-        y += 220;
     }
 
     ctx.scale(1, 1);
@@ -601,25 +627,28 @@ function draw() {
     }
 
     for (let b of buffers) {
-        const x = t * pxPerMs + 40;
-        const targetY = b.thread != null ? b.thread.y + 25 : 160 + 110;
-        const l = smoothstep(b.transitionFrame, b.transitionFrame + 5, frame);
+        const scale = b.scale ? b.scale : 1.0;
+        const x = t * pxPerMs;
+        const targetY = b.thread != null && b.x > 0 ? b.thread.y + (40 - b.height*scale/2) : b.y;
+        const targetAlpha = b.thread != null || b.x < 0 ? 1.0 : 0.25;
+        const l = smoothstep(b.transitionFrame, b.transitionFrame + 7, frame);
         const y = lerp(b.transitionY, targetY, l);
+        const alpha = lerp(b.transitionAlpha, targetAlpha, l);
         b.currentY = y;
+        b.currentAlpha = alpha;
         ctx.save();
-        ctx.strokeStyle = "#404040";
-        ctx.lineWidth = 1;
-        ctx.fillStyle = "#f0f0f0";
-        ctx.beginPath();
-        ctx.rect(x + b.x, y + b.y, b.width + 2, b.height + 2);
-        ctx.fill();
+        ctx.globalAlpha = alpha;
         ctx.stroke();
         ctx.font = "12px Consolas";
         ctx.fillStyle = "#000000";
         ctx.strokeStyle = "#000000";
         ctx.textAlign = 'center'
-        ctx.fillText(b.name, x + b.x + b.width / 2, y - 2);
-        ctx.drawImage(b.canvas, x + b.x + 1, y + b.y + 1)
+        ctx.fillText(b.name, x + b.x + b.width*scale / 2, y - 2);
+        ctx.strokeStyle = "#404040";
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#f0f0f0";
+        ctx.fillRect(x + b.x, y, b.width*scale + 2, b.height*scale + 2);
+        ctx.drawImage(b.canvas, x + b.x + 1, y + 1, b.width*scale, b.height*scale);
         ctx.restore();
     }
 
@@ -633,6 +662,7 @@ function draw() {
             : 'ERROR: ' + errorMessage;
         ctx.fillText(text, t * pxPerMs - 10, y);
     }
+
 
     ctx.restore();
 

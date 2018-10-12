@@ -1,15 +1,32 @@
-import { get, set, signal, wait, work, t, timeline, acquire, release, clear, drawRect } from './timeline';
+import { get, set, signal, wait, work, t, timeline, acquire, release, clear, drawRect, drawFrom } from './timeline';
 
 // maybe should be called display, this thread controls flipping the display from
 // one display buffer to the other.
 function* display() {
     let lastQueueFlip = -1;
     let displayBuffer = 0;
+    acquire(`what your eyes see!`);
     set('display', displayBuffer);
     acquire(`frameBuffer${displayBuffer}`);
     for (let N = 0; ; N++) {
+        // clear("what your eyes see!", "#000000");
+
         // wait for the vblank
-        yield work('scanout', 'Scan out', displayBuffer == 0 ? '#6060a0' : displayBuffer == 1 ?  '#8080F0' : '#808000', 16.66666667);
+        yield work('scanout', 'Scan out', '#6060a0', function*() {
+            for (let H = 0; H < 168; H++) {
+                drawFrom("what your eyes see!", 0, H, `frameBuffer${displayBuffer}`, 0, H, 300, 1);
+                drawRect("what your eyes see!", 0, H, 3, 1, "#ffffff");
+                yield 16.66666667 * 1.0/(168+22);
+            }
+        });
+
+        yield work('vblank', 'Vertical retrace', '#a06060', function*() {
+            for (let H = 0; H < 22; H++) {
+                drawRect("what your eyes see!", 0, 168-H*168/22, 3, 168, "#ff0000");
+                yield 16.66666667 * 1.0/(168+22);
+            }
+        });
+
         // yield 0;
 
         // flip the display
@@ -61,7 +78,7 @@ function* gpu() {
             yield wait(`CPU ${list.name}`, N);
             // ui waits for display to be ready
             if (list.name == 'Shadows') {
-                yield wait(function displayXXX() { return get('display') == displayBuffer });
+                yield wait(function* display() { while (get('display') == displayBuffer) { yield 0; } });
                 acquire(`frameBuffer${displayBuffer}`);
                 clear(`frameBuffer${displayBuffer}`, '#000000');
                 drawRect(`frameBuffer${displayBuffer}`, (N % 20) * 5, 20, 10, 10, '#ffffff');
@@ -102,14 +119,15 @@ function* cpu() {
         canvas: <HTMLCanvasElement>document.getElementById("myCanvas"),
         controls: document.getElementById("myControls"),
         threads: [
-            { name: 'Display', fn: display },
-            { name: 'GPU', fn: gpu },
-            { name: 'CPU', fn: cpu }
+            { name: 'Display', fn: display, y: 260 },
+            { name: 'GPU', fn: gpu, y: 480 },
+            { name: 'CPU', fn: cpu, y: 700 }
         ],
         buffers: [
-            { name: 'frameBuffer0', x: 0, y: 0, width: 100, height: 56 },
-            { name: 'frameBuffer1', x: 110, y: 0, width: 100, height: 56 },
-            { name: 'frameBuffer2', x: 220, y: 0, width: 100, height: 56 }
+            { name: 'frameBuffer0', x: 10, y: 380, width: 300, height: 168, scale: 0.35 },
+            { name: 'frameBuffer1', x: 120, y: 380, width: 300, height: 168, scale: 0.35 },
+            { name: 'frameBuffer2', x: 230, y: 380, width: 300, height: 168, scale: 0.35 },
+            { name: 'what your eyes see!', x: -360, y: 40, width: 300, height: 168 }
         ]
     })
 }());
