@@ -7,7 +7,6 @@ let paused = false;
 let msPerSec = 1;
 let msView = 20;
 
-let tickRate = 30;
 let pxPerMs = 10;
 
 let dragging = false;
@@ -184,7 +183,7 @@ export function* work(name: string, title: string, color: string, msOrFn: number
         thread: runningThread,
         timestamp: t,
         value: value,
-        duration: undefined
+        duration: null
     }
     workEvents.push(e);
     let startT = t;
@@ -340,10 +339,47 @@ export class Thread {
     waitTime = 0;
 }
 
-function tick() {
+const reapT = 100;
+
+function reap() {
+    let firstSignal = 0;
+    for (; firstSignal < signalEvents.length; firstSignal++) {
+        const e = signalEvents[firstSignal];
+        if (t - e.timestamp < reapT) {
+            break;
+        }
+    }
+    signalEvents = signalEvents.slice(firstSignal);
+
+    let firstWait = 0;
+    for (; firstWait < waitEvents.length; firstWait++) {
+        const e = waitEvents[firstWait];
+        if (e.waitTimestamp == null) {
+            break;
+        }
+        if (t - e.waitTimestamp < reapT) {
+            break;
+        }
+    }
+    waitEvents = waitEvents.slice(firstWait);
+
+    let firstWork = 0;
+    for (; firstWork < workEvents.length; firstWork++) {
+        const e = workEvents[firstWork];
+        if (e.duration == null) {
+            break;
+        }
+        if (t - (e.timestamp + e.duration) < reapT) {
+            break;
+        }
+    }
+    workEvents = workEvents.slice(firstWork);
+}
+
+function tick(ms) {
     let msLeft = paused || dragging
         ? 0
-        : msPerSec / tickRate;
+        : msPerSec * ms/1000;
 
     if (errorMessage != null) {
         return;
@@ -352,6 +388,11 @@ function tick() {
     if (!dragging && (t - startT) * pxPerMs > canvas.width - 400) {
         startT += msLeft;
     }
+    if (startT < t - reapT) {
+        startT = t - reapT;
+    }
+
+    reap();
 
     runningThread = null;
     errorMessage = null;
@@ -854,8 +895,12 @@ export function timeline(options: TimelineOptions) {
 
     bind();
 
-    setInterval(() => {
-        tick();
+    let prevTimestamp = 0;
+    function step(timestamp) {
+        tick(timestamp - prevTimestamp);
+        prevTimestamp = timestamp;
         draw();
-    }, tickRate);
+        requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
 }
