@@ -339,7 +339,7 @@ export class Thread {
     waitTime = 0;
 }
 
-const reapT = 100;
+const reapT = 300;
 
 function reap() {
     let firstSignal = 0;
@@ -704,14 +704,13 @@ function draw() {
         ctx.fillText(text, t * pxPerMs - 10, y);
     }
 
-
     ctx.restore();
 
     for (let t of threads) {
         ctx.font = "56px Calibri";
         ctx.fillStyle = "#000000";
         ctx.textAlign = 'left'
-        ctx.fillText(t.name, 2, t.y - 10);
+        ctx.fillText(t.name, 2, t.y - 40);
     }
 
     frame++;
