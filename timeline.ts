@@ -1,12 +1,13 @@
 export let t = 0;
 
 let startT = -2;
+let stopT = null;
+const reapT = 300;
 let frame = 0;
 
 let paused = false;
 let msPerSec = 1;
 let msView = 20;
-
 let pxPerMs = 10;
 
 let dragging = false;
@@ -18,6 +19,8 @@ var buffers: Buffer[] = [];
 
 var canvas: HTMLCanvasElement;
 var controls: HTMLElement;
+
+let director: IterableIterator<any> = null;
 
 var ctx: CanvasRenderingContext2D;
 
@@ -172,7 +175,7 @@ export function* wait(keyOrMsOrFn: string | number | Function, value?: number | 
     }
 }
 
-export function* work(name: string, title: string, color: string, msOrFn: number|Function, value?: number) {
+export function* work(name: string, title: string, color: string, msOrFn: number | Function, value?: number) {
     if (runningThread.name in inspect) {
         console.log(`${runningThread.name}: work ${name} ${msOrFn} => ${value}`);
     }
@@ -234,7 +237,7 @@ export class Buffer {
     transitionFrame: number = 0;
 }
 
-export function getBuffer(name: string) : Buffer {
+export function getBuffer(name: string): Buffer {
     for (let b of buffers) {
         if (b.name == name) {
             return b;
@@ -339,8 +342,6 @@ export class Thread {
     waitTime = 0;
 }
 
-const reapT = 300;
-
 function reap() {
     let firstSignal = 0;
     for (; firstSignal < signalEvents.length; firstSignal++) {
@@ -379,10 +380,14 @@ function reap() {
 function tick(ms) {
     let msLeft = paused || dragging
         ? 0
-        : msPerSec * ms/1000;
+        : msPerSec * ms / 1000;
 
     if (errorMessage != null) {
         return;
+    }
+
+    if (stopT != null && t + msLeft > stopT) {
+        msLeft = stopT - t;
     }
 
     if (!dragging && (t - startT) * pxPerMs > canvas.width - 400) {
@@ -398,10 +403,6 @@ function tick(ms) {
     errorMessage = null;
 
     try {
-
-        // if (t > 5) {
-        //     throw new Error("YO YO YO");
-        // }
 
         while (msLeft > 0) {
 
@@ -583,7 +584,7 @@ function draw() {
     ctx.font = "italic 44px Calibri";
     ctx.textAlign = 'left'
     ctx.fillStyle = "#808080";
-    ctx.fillText("t", t * pxPerMs + 5, 45);
+    ctx.fillText(`t=${(Math.round(t * 1000) / 1000).toFixed(3)}ms`, t * pxPerMs + 5, 45);
     ctx.restore();
 
     for (let e of waitEvents) {
@@ -670,7 +671,7 @@ function draw() {
     for (let b of buffers) {
         const scale = b.scale ? b.scale : 1.0;
         const x = t * pxPerMs;
-        const targetY = b.thread != null && b.x > 0 ? b.thread.y + (40 - b.height*scale/2) : b.y;
+        const targetY = b.thread != null && b.x > 0 ? b.thread.y + (45 - b.height * scale / 2) : b.y;
         const targetAlpha = b.thread != null || b.x < 0 ? 1.0 : 0.25;
         const l = smoothstep(b.transitionFrame, b.transitionFrame + 7, frame);
         const y = lerp(b.transitionY, targetY, l);
@@ -684,12 +685,12 @@ function draw() {
         ctx.fillStyle = "#000000";
         ctx.strokeStyle = "#000000";
         ctx.textAlign = 'center'
-        ctx.fillText(b.name, x + b.x + b.width*scale / 2, y - 2);
+        ctx.fillText(b.name, x + b.x + b.width * scale / 2, y - 2);
         ctx.strokeStyle = "#404040";
         ctx.lineWidth = 1;
         ctx.fillStyle = "#f0f0f0";
-        ctx.fillRect(x + b.x, y, b.width*scale + 2, b.height*scale + 2);
-        ctx.drawImage(b.canvas, x + b.x + 1, y + 1, b.width*scale, b.height*scale);
+        ctx.fillRect(x + b.x, y, b.width * scale + 2, b.height * scale + 2);
+        ctx.drawImage(b.canvas, x + b.x + 1, y + 1, b.width * scale, b.height * scale);
         ctx.restore();
     }
 
@@ -786,7 +787,7 @@ function mouseUp(this: HTMLCanvasElement, ev: MouseEvent) {
     let canvasX = ev.clientX - rect.left;
 
     if (Math.abs(canvasX - dragStartX) < 5) {
-        setPaused(!paused);
+        advanceDirector();
     }
 }
 
@@ -803,13 +804,13 @@ function mouseWheel(this: HTMLCanvasElement, ev: WheelEvent) {
     ev.preventDefault();
 }
 
-function setMsView(value: number) {
+export function setMsView(value: number) {
     msView = value;
     controls.querySelector("#view")
         .setAttribute('value', String(Math.round(msView * 10) / 10));
 }
 
-function setPaused(newPaused: boolean) {
+export function setPaused(newPaused: boolean) {
     paused = newPaused;
 
     controls.querySelectorAll("#pause > i").forEach((item) => {
@@ -823,7 +824,7 @@ function setPaused(newPaused: boolean) {
     });
 }
 
-function setMsPerSec(newMsPerSec: number) {
+export function setMsPerSec(newMsPerSec: number) {
     msPerSec = newMsPerSec;
 
     controls.querySelectorAll("#rate").forEach((button) => {
@@ -835,6 +836,30 @@ function setMsPerSec(newMsPerSec: number) {
     });
 }
 
+export function scrollTo(ms: number) {
+    startT = ms;
+}
+
+export function runFor(ms: number) {
+    stopT = t + ms;
+}
+
+export function run() {
+    stopT = null;
+}
+
+function advanceDirector() {
+    if (director != null) {
+        try {
+            director.next();
+        } catch (err) {
+            errorMessage = err.message;
+            console.log(`In director: ` + err.message);
+            console.log(err.stack);
+        }
+    }
+}
+
 function keyPress(this: HTMLCanvasElement, ev: KeyboardEvent) {
     if (ev.keyCode == 32) {
         setPaused(!paused);
@@ -842,6 +867,11 @@ function keyPress(this: HTMLCanvasElement, ev: KeyboardEvent) {
 }
 
 function bind() {
+    controls.querySelector("#next")
+        .addEventListener("click", function (this, ev) {
+            advanceDirector();
+        });
+
     controls.querySelector("#pause")
         .addEventListener("click", function (this, ev) {
             setPaused(!paused);
@@ -874,11 +904,13 @@ interface TimelineOptions {
     controls: HTMLElement;
     threads: ThreadParams[];
     buffers?: BufferParams[];
+    director?: IterableIterator<any>;
 }
 
 export function timeline(options: TimelineOptions) {
     canvas = options.canvas;
     controls = options.controls;
+    director = options.director;
 
     ctx = canvas.getContext("2d");
 
@@ -893,6 +925,8 @@ export function timeline(options: TimelineOptions) {
     }
 
     bind();
+
+    advanceDirector();
 
     let prevTimestamp = 0;
     function step(timestamp) {

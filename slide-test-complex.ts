@@ -114,7 +114,7 @@ function* cpu() {
     }
 }
 
-export async function run() {
+export async function build() {
     timeline({
         canvas: <HTMLCanvasElement>document.getElementById("myCanvas"),
         controls: document.getElementById("myControls"),

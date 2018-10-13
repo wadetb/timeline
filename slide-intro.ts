@@ -1,4 +1,4 @@
-import { get, set, signal, wait, work, t, timeline, acquire, release, clear, drawRect, drawFrom } from './timeline';
+import { get, set, signal, wait, work, t, timeline, acquire, release, clear, drawRect, drawFrom, runFor, run, scrollTo, setMsPerSec, setMsView } from './timeline';
 
 // maybe should be called display, this thread controls flipping the display from
 // one display buffer to the other.
@@ -61,10 +61,21 @@ function* computer() {
     }
 }
 
+function* director() {
+    scrollTo(-15);
+    setMsPerSec(30);
+    setMsView(100);
+    for(let N = 0; N < 5; N++) {
+        runFor(16.6667);
+        yield;
+    }
+    run();
+}
+
 const t1Y = 450;
 const t2Y = 680;
 
-export async function run() {
+export async function build() {
     timeline({
         canvas: <HTMLCanvasElement>document.getElementById("myCanvas"),
         controls: document.getElementById("myControls"),
@@ -76,6 +87,7 @@ export async function run() {
             { name: 'frameBuffer0', x: 10, y: (t1Y + t2Y) / 2, width: 300, height: 168, scale: 0.35 },
             { name: 'frameBuffer1', x: 120, y: (t1Y + t2Y) / 2, width: 300, height: 168, scale: 0.35 },
             { name: 'what your eyes see!', x: -360, y: 100, width: 300, height: 168 }
-        ]
+        ],
+        director: director()
     })
 }
