@@ -1,4 +1,4 @@
-import { get, set, signal, wait, work, t, timeline, acquire, release, clear, drawRect, drawFrom, runFor, run, scrollTo, setMsPerSec, setMsView } from './timeline';
+import { get, set, signal, wait, work, t, timeline, acquire, release, clear, drawRect, drawFrom, runFor, run, scrollTo, setMsPerSec, setMsView, drawSprite } from './timeline';
 
 // maybe should be called display, this thread controls flipping the display from
 // one display buffer to the other.
@@ -44,17 +44,27 @@ function* display() {
 function* computer() {
     set('queue flip', -1);
     let displayBuffer = 1;
+    let startX = 0;
     for (let N = 0; ; N++) {
         // wait for display buffer
         yield wait(function* display() { while (get('display') == displayBuffer) { yield 0; } });
 
         // render the frame
         acquire(`frameBuffer${displayBuffer}`);
-        clear(`frameBuffer${displayBuffer}`, '#000000');
-        drawRect(`frameBuffer${displayBuffer}`, (N % 20) * 5, 20, 10, 10, '#ffffff');
-        yield work("Render", "Render", "#808080", 25.0);
+        clear(`frameBuffer${displayBuffer}`, '#ffffff');
+        drawSprite(`frameBuffer${displayBuffer}`, 2, startX + 300, 168-48);
+        drawSprite(`frameBuffer${displayBuffer}`, 0, startX + 300, 168-32);
+        drawSprite(`frameBuffer${displayBuffer}`, 1, startX + 300, 168-16);
+        let flapFrames = [5, 6, 7, 6];
+        drawSprite(`frameBuffer${displayBuffer}`, flapFrames[N%flapFrames.length], 80, 80);
+        yield work("Render", "Render", "#808080", 15.0);
         release(`frameBuffer${displayBuffer}`);
         displayBuffer = (displayBuffer + 1) % 2;
+
+        startX -= 10;
+        if (startX < -320) {
+            startX = 0;
+        }
 
         // all drawing done, queue the page flip
         signal('queue flip', N);
@@ -65,7 +75,7 @@ function* director() {
     scrollTo(-15);
     setMsPerSec(30);
     setMsView(100);
-    for(let N = 0; N < 5; N++) {
+    for(let N = 0; N < 1; N++) {
         runFor(16.6667);
         yield;
     }
@@ -79,6 +89,7 @@ export async function build() {
     timeline({
         canvas: <HTMLCanvasElement>document.getElementById("myCanvas"),
         controls: document.getElementById("myControls"),
+        sprites: <HTMLImageElement>document.getElementById("mySprites"),
         threads: [
             { name: 'Display', fn: display, y: t1Y },
             { name: 'Computer', fn: computer, y: t2Y },

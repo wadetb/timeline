@@ -19,6 +19,7 @@ var buffers: Buffer[] = [];
 
 var canvas: HTMLCanvasElement;
 var controls: HTMLElement;
+var sprites: HTMLImageElement;
 
 let director: IterableIterator<any> = null;
 
@@ -280,6 +281,11 @@ export function drawFrom(name: string, x: number, y: number, sourceName: string,
         throw new Error(`Tried to draw from buffer ${sourceName}, but it is owned by ${srcB.thread.name}.`);
     }
     ctx.drawImage(srcB.canvas, sx, sy, sw, sh, x, y, sw, sh)
+}
+
+export function drawSprite(name: string, index: number, x: number, y: number) {
+    const ctx = drawOn(name);
+    ctx.drawImage(sprites, index*16, 0, 16, 16, x, y, 16, 16)
 }
 
 export function acquire(name: string) {
@@ -902,6 +908,7 @@ function bind() {
 interface TimelineOptions {
     canvas: HTMLCanvasElement;
     controls: HTMLElement;
+    sprites?: HTMLImageElement;
     threads: ThreadParams[];
     buffers?: BufferParams[];
     director?: IterableIterator<any>;
@@ -910,6 +917,7 @@ interface TimelineOptions {
 export function timeline(options: TimelineOptions) {
     canvas = options.canvas;
     controls = options.controls;
+    sprites = options.sprites;
     director = options.director;
 
     ctx = canvas.getContext("2d");
